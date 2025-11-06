@@ -1,7 +1,7 @@
 /* motor_controller_mysql_safe.c
    MySQL-based motor controller (thread-safe and crash-free).
    Compile:
-     gcc motor_controller_mysql_safe.c -o motor_controller_mysql_safe \
+     gcc motor_controller_mysql.c -o motor_controller_mysql \
          -lmysqlclient -lpthread -lm -I/usr/local/opt/mysql/include -L/usr/local/opt/mysql/lib
 */
 
@@ -71,7 +71,7 @@ void escape_string(MYSQL *conn, const char *src, char *dst, size_t dst_size) { /
 
 /* Create database and tables if missing */
 int init_db(MYSQL *conn) {
-    if (mysql_query(conn, "CREATE DATABASE IF NOT EXISTS motordb")) {
+    if (mysql_query(conn, "CREATE DATABASE IF NOT EXISTS motordb")) { 
         fprintf(stderr, "Failed to create database: %s\n", mysql_error(conn));
         return 0;
     }
@@ -257,13 +257,23 @@ void *telemetry_thread(void *arg) {
 
 // Command poller thread 
 void *command_poller_thread(void *arg) {
-    MYSQL *conn = thread_db_connect();    //connect to the server
-    if (!conn) return NULL;
-    if (!init_db(conn)) return NULL;
+    printf("[Poller] Attempting DB connection...\n");
+    MYSQL *conn = thread_db_connect();
+    if (!conn) {
+        fprintf(stderr, "[Poller] Failed to connect to DB. Exiting thread.\n");
+        return NULL;
+    }
+    printf("[Poller] DB connected.\n");
+    
+    if (!init_db(conn)) {
+        fprintf(stderr, "[Poller] Failed to initialize DB/Select DB. Exiting thread.\n");
+        return NULL;
+    }
+    printf("[Poller] DB initialized. Starting poll loop.\n");
 
     while (1) {
         poll_and_process_commands(conn, &state);
-        msleep(COMMAND_POLL_INTERVAL_MS);    //controller reads from the database every 100ms as required by the spec
+        msleep(COMMAND_POLL_INTERVAL_MS);
     }
 
     mysql_close(conn);
