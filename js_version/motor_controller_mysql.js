@@ -35,7 +35,7 @@ const RANDOM_ERROR_MAX = 0.5;
 // Database Connection
 let db;
 
-async function connectDB() { //connect db to mysql database
+async function connectDB() { // Connect db to mysql database
     try {
         db = await mysql.createConnection(DB_CONFIG); 
         console.log('Motor Controller connected to MySQL database.');
@@ -137,12 +137,12 @@ async function checkCommands() {
 
             if (commandTime > last_command_ts + COMMAND_COOLDOWN_MS) {
                 
-                // 1. Calculate the new setpoint based on the last known speed (from PID state)
+                // Calculates the new motor speed set point based on the last known speed from the PID state
                 const currentSetpoint = motor_speed_set_point;
                 const changeAmount = currentSetpoint * (percentChange / 100.0);
-                const newSetpoint = Math.max(0, Math.min(100, currentSetpoint + changeAmount));
+                const newSetpoint = Math.max(0, Math.min(100, currentSetpoint + changeAmount)); // sets it between 0 - 100
                 
-                // 2. Apply and Log the Command
+                // apply and log command
                 motor_speed_set_point = parseFloat(newSetpoint);
                 last_command_ts = commandTime; 
                 console.log(`\n✅ COMMAND RECEIVED: New Setpoint is ${motor_speed_set_point.toFixed(2)}.`);
@@ -157,13 +157,12 @@ async function checkCommands() {
     }
 }
 
-// --- Main Execution ---
+// main
 async function main() {
-    await connectDB(); //connect to SQL server
+    await connectDB(); // Connect to SQL server
     
-    // Set up the periodic tasks
-    setInterval(writeData, WRITE_INTERVAL_MS);
-    setInterval(checkCommands, COMMAND_POLL_INTERVAL_MS);
+    setInterval(writeData, WRITE_INTERVAL_MS); // Writes to database every 0.2s
+    setInterval(checkCommands, COMMAND_POLL_INTERVAL_MS); // Polls for commands every 0.1s 
     
     console.log(`Motor Controller running: Logging to motordb every ${WRITE_INTERVAL_MS}ms, Polling 'commands' every ${COMMAND_POLL_INTERVAL_MS}ms.`);
 }

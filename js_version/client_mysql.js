@@ -1,9 +1,9 @@
 // client_mysql.js
 
 const mysql = require('mysql2/promise');
-const readline = require('readline');
+const readline = require('readline'); // Allows the ability to write to stream
 
-// --- Configuration ---
+// Configures the database
 const DB_CONFIG = {
     host: '127.0.0.1',
     user: 'motoruser',
@@ -11,15 +11,14 @@ const DB_CONFIG = {
     database: 'motordb'
 };
 
-// Use a command line argument for the initial client ID
-let CLIENT_ID = process.argv[2] || 'ClientA'; 
-const PEER_POLL_INTERVAL_MS = 250; // Check 'commands' table for peer activity
+let CLIENT_ID = process.argv[2] || 'ClientA'; // Default client name is clientA
+const PEER_POLL_INTERVAL_MS = 250; // Check 'commands' table for peer activity every 0.25s
 
-// --- State Variables ---
 let db;
 let last_peer_command_ts = 0; // Timestamp of the last command written to 'commands' table
 
-async function connectDB() {
+
+async function connectDB() { // Connect DB to mysql database
     try {
         db = await mysql.createConnection(DB_CONFIG);
         console.log(`Client ${CLIENT_ID} connected to MySQL database.`);
@@ -29,8 +28,10 @@ async function connectDB() {
     }
 }
 
-// --- Send Command to Commands Table ---
+// Sends command to 'commands' table
 async function sendCommand(percentageChange) {
+
+    // SQL query
     const sql = `
         INSERT INTO commands 
         (client_id, percent_change) 
@@ -38,7 +39,7 @@ async function sendCommand(percentageChange) {
     `;
     
     try {
-        // The database automatically sets the 'ts' timestamp
+        // Database automatically sets the 'ts' timestamp
         await db.execute(sql, [CLIENT_ID, percentageChange]);
         console.log(`\n📣 SENT COMMAND: Change by ${percentageChange}% from ${CLIENT_ID}.`);
     } catch (err) {
@@ -46,7 +47,7 @@ async function sendCommand(percentageChange) {
     }
 }
 
-// --- Monitor Peer Commands from Commands Table ---
+// Checks for peer commands from 'commands' table and logs them
 async function checkPeerCommands() {
     try {
         // Query for the latest command written by ANY client
@@ -58,8 +59,6 @@ async function checkPeerCommands() {
             const { client_id, percent_change, ts } = rows[0];
             const commandTime = new Date(ts).getTime();
 
-            // Check 1: Is the command NOT from this client?
-            // Check 2: Is it a new command we haven't seen before?
             if (client_id !== CLIENT_ID && commandTime > last_peer_command_ts) {
                 console.log(`\n\n📢 PEER COMMAND DETECTED:`);
                 console.log(`  - Issued by: ${client_id}`);
@@ -71,35 +70,17 @@ async function checkPeerCommands() {
             }
         }
     } catch (err) {
-        // Suppress transient errors to keep the prompt clean
+        
         // console.error('Error checking peer commands:', err.message);
     }
 }
 
-
-// --- Main Execution ---
-async function main() {
-    if (!CLIENT_ID) {
-        console.error("Please run with a client ID, e.g., 'node client_mysql.js ClientA'");
-        process.exit(1);
-    }
-    await connectDB();
-    
-    // Set up peer monitoring
-    setInterval(checkPeerCommands, PEER_POLL_INTERVAL_MS);
-
-    // Set up interactive console for sending commands
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-    });
-
-    const promptUser = () => {
-        rl.question(`\n[${CLIENT_ID}] Enter command: (e.g., +25, -10, or /setid NewName) `, (answer) => {
+// Prompt user function
+const promptUser = (rlInterface) => {
+        rlInterface.question(`\n[${CLIENT_ID}] Enter command: (e.g., +25, -10, or type /setid NewName) `, (answer) => {
             const trimmedAnswer = answer.trim();
 
-            if (trimmedAnswer.startsWith('/setid ')) {
-                // --- Handle ID Change ---
+            if (trimmedAnswer.startsWith('/setid ')) { // String types after /setid will now be new Client ID
                 const newId = trimmedAnswer.substring(7).trim();
                 if (newId) {
                     CLIENT_ID = newId;
@@ -107,8 +88,7 @@ async function main() {
                 } else {
                     console.log("❌ Invalid /setid command. Usage: /setid NewName");
                 }
-            } else {
-                // --- Handle Speed Command ---
+            } else { // Otherwise detects for new percentage
                 const percentage = parseInt(trimmedAnswer);
                 if (!isNaN(percentage) && percentage !== 0) {
                     sendCommand(percentage);
@@ -116,11 +96,30 @@ async function main() {
                     console.log("❌ Invalid input. Please enter a number like +25 or -10.");
                 }
             }
-            promptUser(); // Loop
+            promptUser(rlInterface); // Loops continuously
         });
     };
 
-    promptUser();
+// main
+async function main() {
+
+    // No client ID error checker
+    if (!CLIENT_ID) {
+        console.error("Please run with a client ID, e.g., 'node client_mysql.js ClientA'");
+        process.exit(1);
+    }
+
+    await connectDB(); // Connect to database
+
+    setInterval(checkPeerCommands, PEER_POLL_INTERVAL_MS); // Sets up peer monitoring and polls every 0.25s
+
+    // Sets up interactive console for sending commands
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    promptUser(rl); // Initial call to promptUser() function loop
     console.log(`Client ${CLIENT_ID} running: Polling peers every ${PEER_POLL_INTERVAL_MS}ms.`);
 }
 
