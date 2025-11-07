@@ -114,7 +114,7 @@ async function checkCommands() {
     try {
         // Find the LATEST command written by ANY client
         const [rows] = await db.execute(
-            `SELECT percent_change, ts FROM commandsJS ORDER BY ts DESC LIMIT 1`
+            `SELECT percent_change, ts FROM commands ORDER BY ts DESC LIMIT 1`
         );
 
         if (rows.length > 0) {
