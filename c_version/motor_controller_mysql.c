@@ -5,7 +5,7 @@
          -lmysqlclient -lpthread -lm -I/usr/local/opt/mysql/include -L/usr/local/opt/mysql/lib
 */
 
-#define _POSIX_C_SOURCE 200809L //
+#define _POSIX_C_SOURCE 200809L 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +13,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <math.h>
-#include <mysql/mysql.h>
+#include <mysql/mysql.h> //mysql library
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -36,7 +36,7 @@ typedef struct {
 
 MotorState state;
 
-/* MySQL struct connection parameters */
+// MySQL struct database connection parameters 
 const char *db_host = "127.0.0.1";
 const char *db_user = "motoruser";
 const char *db_pass = "MotorPass123!";
@@ -69,7 +69,7 @@ void escape_string(MYSQL *conn, const char *src, char *dst, size_t dst_size) { /
     dst[out_len] = '\0';
 }
 
-/* Create database and tables if missing */
+// Create database from tables if missing
 int init_db(MYSQL *conn) {
     if (mysql_query(conn, "CREATE DATABASE IF NOT EXISTS motordb")) { 
         fprintf(stderr, "Failed to create database: %s\n", mysql_error(conn));
@@ -111,7 +111,7 @@ int init_db(MYSQL *conn) {
     return 1;
 }
 
-/* Insert telemetry row */
+// Insert Telemetry Row
 void insert_telemetry(MYSQL *conn, MotorState *s) {
     char q[512];
     char b1[64], b2[64], b3[64], b4[64], b5[64];
@@ -133,7 +133,7 @@ void insert_telemetry(MYSQL *conn, MotorState *s) {
     }
 }
 
-/* Insert command (from TCP clients) */
+// Inserts commands from TCP clients
 void insert_command(MYSQL *conn, const char *client_id, double percent, const char *issued_via) {
     char q[512];
     char percent_s[64];
@@ -180,7 +180,7 @@ void poll_and_process_commands(MYSQL *conn, MotorState *s) {
         pthread_mutex_lock(&s->lock); //locks resources from other threads for processing 
         s->motor_speed_set_point += s->motor_speed_set_point * (p / 100.0); //gets new percentage
         if (s->motor_speed_set_point < 0) s->motor_speed_set_point = 0;  //min clamp
-        if (s->motor_speed_set_point > 10000) s->motor_speed_set_point = 10000;  //max clamp
+        if (s->motor_speed_set_point > 1000) s->motor_speed_set_point = 10000;  //max clamp
         pthread_mutex_unlock(&s->lock);
 
         char uq[256];
@@ -212,7 +212,7 @@ double pid_step(PID *pid, double setpoint, double measure, double dt) {
     pid->integral += err * dt;                                              //accumulates the past errors over time
     double derivative = dt > 0 ? (err - pid->prev_err) / dt : 0;            //gets derivative, if dt is 0 then makes it 0
     pid->prev_err = err;                                                    //previous error now equals the current error
-    return pid->kp * err + pid->ki * pid->integral + pid->kd * derivative;  //returns the summation of the P, I, and D. This value will be applied to the current motor speed. Can be positive or negative. 
+    return pid->kp * err + pid->ki * pid->integral + pid->kd * derivative;  //returns the summation of the P, I, and D. This value will be applied to the current motor speed to simulate. Can be positive or negative. 
 }
 
 // Connects threads to MYSQL server
@@ -238,17 +238,17 @@ void *telemetry_thread(void *arg) {
 
     while (1) {
         pthread_mutex_lock(&state.lock);
-        state.gas_level -= 0.02; if (state.gas_level < 0) state.gas_level = 0;               //we lose a little gas each 
+        state.gas_level -= 0.02; if (state.gas_level < 0) state.gas_level = 0;               //we lose a little gas each time
         state.battery_level -= 0.01; if (state.battery_level < 0) state.battery_level = 0;   //we lose a little battery
         double control = pid_step(&pid, state.motor_speed_set_point, state.motor_speed, dt); //run the loop
-        double noise = ((rand() % 100) - 50) / 100.0;                                        //*random error!
+        double noise = ((rand() % 100) - 50) / 100.0;                                        //random error!
         state.motor_speed += (control * 0.1 + noise) * dt;                                   //new motor speed is (the new calculated control speed * 0.1 "to provide a realistic scale factor" + our simulated noise ) * elapsed time which is 0.2s or 200ms
         if (state.motor_speed < 0) state.motor_speed = 0;                                    //speed can't be less than 0
         state.motor_temp = 20.0 + state.motor_speed * 0.01 + ((rand()%100)/100.0 - 0.5);     //temp caclulated motor speed plus some random error
         pthread_mutex_unlock(&state.lock);                                                   
 
         insert_telemetry(conn, &state);  //insert new values into database
-        msleep(TELEMETRY_INTERVAL_MS);   //sleep 200ms as resquested by design spec
+        msleep(TELEMETRY_INTERVAL_MS);   //sleep 200ms as requested by design spec
     }
 
     mysql_close(conn);
@@ -335,10 +335,12 @@ void *tcp_server_thread(void *arg) {
     return NULL;
 }
 
-/* Main */
+// main
 int main() {
     srand(time(NULL));
     pthread_mutex_init(&state.lock, NULL);
+
+    // Initialize state variables
     state.gas_level = 100.0;
     state.battery_level = 100.0;
     state.motor_speed = 0.0;
@@ -346,10 +348,11 @@ int main() {
     state.motor_temp = 40.0;
 
     pthread_t t1, t2, t3;
-    pthread_create(&t1, NULL, telemetry_thread, NULL);
-    pthread_create(&t2, NULL, command_poller_thread, NULL);
-    pthread_create(&t3, NULL, tcp_server_thread, NULL);
+    pthread_create(&t1, NULL, telemetry_thread, NULL); //thread for calculating new values
+    pthread_create(&t2, NULL, command_poller_thread, NULL); //thread for polling new commands
+    pthread_create(&t3, NULL, tcp_server_thread, NULL); //thread for server. 
 
+    //ensures main() is suspended until t1, t2, & t3 are terminated
     pthread_join(t1, NULL);
     pthread_join(t2, NULL);
     pthread_join(t3, NULL);

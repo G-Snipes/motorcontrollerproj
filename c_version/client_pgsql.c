@@ -11,19 +11,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <pthread.h> // Not strictly needed for this single-threaded client, but kept.
+#include <pthread.h> 
 #include <unistd.h>
 #include <math.h>
-#include <libpq-fe.h> 
+#include <libpq-fe.h> //postgresql library
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <arpa/inet.h>
 
-// --- CHANGE 2: Use the standard PostgreSQL connection string ---
+// PostgreSQL connection string 
 const char *db_conninfo = "host=127.0.0.1 port=5432 dbname=motordb user=motoruser password=MotorPass123!";
-// MySQL port 3306 is no longer relevant, but the TCP port 9090 is correct.
+
 #define TCP_PORT 9090
 #define TCP_HOST "127.0.0.1"
 #define POLL_MS 250
@@ -38,22 +38,26 @@ void msleep(long ms) {
     nanosleep(&req, NULL);
 }
 
-// TCP send function remains the same as it connects to the same TCP server.
+// TCP send function stays the same as it connects to the same TCP server.
 void send_tcp_command(const char *client_id, double percent) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
+
     if (sock < 0) {
         perror("socket");
         return;
     }
-    struct sockaddr_in srv;
-    srv.sin_family = AF_INET;
-    srv.sin_port = htons(TCP_PORT);
-    inet_pton(AF_INET, TCP_HOST, &srv.sin_addr);
+
+    struct sockaddr_in srv; //socket decleration
+    srv.sin_family = AF_INET; //IPV4
+    srv.sin_port = htons(TCP_PORT); //sets port # to 9090
+    inet_pton(AF_INET, TCP_HOST, &srv.sin_addr); // converts the human-readable IP address string into a network address structure.
+
     if (connect(sock, (struct sockaddr*)&srv, sizeof(srv)) < 0) {
         perror("connect");
         close(sock);
         return;
     }
+
     char buf[256];
     snprintf(buf, sizeof(buf), "%s %.6f", client_id, percent);
     write(sock, buf, strlen(buf));
@@ -70,14 +74,14 @@ int main(int argc, char **argv) {
     int will_send = 0;
     if (argc >= 3) { will_send = 1; send_percent = atof(argv[2]); }
 
-    // --- CHANGE 3: Initialize and connect using PQconnectdb ---
+    // Initialize and connects to the database using PQconnectdb 
     PGconn *conn = PQconnectdb(db_conninfo);
     if (PQstatus(conn) != CONNECTION_OK) {
         fprintf(stderr, "DB connection failed: %s\n", PQerrorMessage(conn));
         PQfinish(conn); return 1;
     }
     
-    // Check for the table's existence (optional but robust)
+    // Check for the table's existence 
     PGresult *check_res = PQexec(conn, "SELECT 1 FROM commands LIMIT 1");
     if (PQresultStatus(check_res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "Error: Commands table not found or accessible. Is motor_controller running?\n");
@@ -85,7 +89,8 @@ int main(int argc, char **argv) {
         PQfinish(conn);
         return 1;
     }
-    PQclear(check_res);
+
+    PQclear(check_res); // Frees the memory allocated by the PGexec() function for the PGresult object.
 
 
     if (will_send) {
@@ -96,13 +101,12 @@ int main(int argc, char **argv) {
     long long last_id = 0;
     while (1) {
         char q[256];
-        // Note: PostgreSQL uses BIGINT for long long comparison
         snprintf(q, sizeof(q), "SELECT id, client_id, percent_change, ts FROM commands WHERE id > %lld ORDER BY id ASC", last_id);
         
-        // --- CHANGE 4: Execute query using PQexec ---
-        PGresult *res = PQexec(conn, q);
+        PGresult *res = PQexec(conn, q); // Executes the query
+
         
-        // --- CHANGE 5: Check result status and handle error ---
+        // Checks result status and handle error 
         if (PQresultStatus(res) != PGRES_TUPLES_OK) {
             fprintf(stderr, "select failed: %s\n", PQerrorMessage(conn));
             PQclear(res);
@@ -110,10 +114,11 @@ int main(int argc, char **argv) {
             continue;
         }
 
-        // --- CHANGE 6: Iterate through PostgreSQL results ---
+        // Iterates through the PostgreSQL results 
         int rows = PQntuples(res);
         if (rows > 0) {
             for (int i = 0; i < rows; i++) {
+
                 // PQgetvalue access: (result_set, row_index, column_index)
                 long long id = atoll(PQgetvalue(res, i, 0));
                 const char *cid = PQgetvalue(res, i, 1);
@@ -125,13 +130,13 @@ int main(int argc, char **argv) {
             }
         }
         
-        // --- CHANGE 7: Always clear the result object ---
+        // Always clear the result object
         PQclear(res);
 
         usleep(POLL_MS * 1000); //sleeps for 250ms
     }
 
-    // --- CHANGE 8: Close connection using PQfinish ---
+    // Closes connection
     PQfinish(conn);
     return 0;
 }

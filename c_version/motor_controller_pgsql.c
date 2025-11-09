@@ -1,4 +1,4 @@
-/* motor_controller_postgres.c
+/* motor_controller_pgsql.c
    PostgreSQL based motor controller (thread-safe and crash-free).
    Compile:
      gcc -I/usr/local/opt/libpq/include motor_controller_pgsql.c -o motor_controller_pgsql -L/usr/local/opt/libpq/lib -lpq -lpthread -lm
@@ -12,7 +12,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <math.h>
-#include <libpq-fe.h> // Correct header
+#include <libpq-fe.h> // postgresql library
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -38,7 +38,7 @@ typedef struct {
 
 MotorState state;
 
-/* PosgreSQL connection string construction */
+// PostgreSQL connection string 
 const char *db_conninfo = "host=127.0.0.1 port=5432 dbname=motordb user=motoruser password=MotorPass123!"; // Correct connection string
 unsigned int db_port = 5432; // Kept for reference, but included in db_conninfo
 
@@ -57,14 +57,14 @@ void msleep(long ms) {
     nanosleep(&req, NULL);
 }
 
-// *** CHANGE 1: Corrected escape_string to use PQescapeString, with proper error check and null termination ***
-// Safe escape helper: writes to stack buffer
+// Sanitizes data in query
 void escape_string(PGconn *conn, const char *src, char *dst, size_t dst_size) {
     if (!src) {
         dst[0] = '\0';
         return;
     }
     size_t len = strlen(src);
+
     // PQescapeString requires a buffer of size at least (2 * len + 1)
     if (len * 2 + 1 > dst_size) {
         fprintf(stderr, "escape_string: buffer too small (src_len=%zu, dst_size=%zu)\n", len, dst_size);
@@ -80,12 +80,13 @@ void escape_string(PGconn *conn, const char *src, char *dst, size_t dst_size) {
         dst[0] = '\0';
         return;
     }
-    // No explicit null terminator needed as PQescapeString handles it, but good practice for safety
+
+    // Null terminator
     dst[out_len] = '\0';
 }
 
 
-/* Create database and tables if missing */
+// Creates database and tables if missing 
 int init_db(PGconn *conn) {
 
     pthread_mutex_lock(&db_init_lock); //lock to prevent race conditions
@@ -129,7 +130,7 @@ int init_db(PGconn *conn) {
     pthread_mutex_unlock(&db_init_lock); //release lock
 }
 
-/* Insert telemetry row */
+// Inserts telemetry row
 void insert_telemetry(PGconn *conn, MotorState *s) {
     char q[512];
     char b1[64], b2[64], b3[64], b4[64], b5[64];
@@ -153,7 +154,7 @@ void insert_telemetry(PGconn *conn, MotorState *s) {
     PQclear(res);
 }
 
-/* Insert command (from TCP clients) */
+// Insert command (from TCP clients) 
 void insert_command(PGconn *conn, const char *client_id, double percent, const char *issued_via) {
     char q[512];
     char percent_s[64];
@@ -167,7 +168,7 @@ void insert_command(PGconn *conn, const char *client_id, double percent, const c
         "INSERT INTO commands (client_id, percent_change, issued_via) VALUES ('%s', %s, '%s')",
         esc_client, percent_s, esc_via);
 
-    // *** CHANGE 2 & 3: Replaced pgsql_query and pgsql_error with PQexec and proper status check ***
+    // Replaced pgsql_query and pgsql_error with PQexec and proper status check 
     PGresult *res = PQexec(conn, q);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
         fprintf(stderr, "Command insert failed: %s\n", PQerrorMessage(conn));
@@ -178,9 +179,6 @@ void insert_command(PGconn *conn, const char *client_id, double percent, const c
 // Poll and process commands 
 void poll_and_process_commands(PGconn *conn, MotorState *s) {
     const char *select_q = "SELECT id, client_id, percent_change, ts FROM commands WHERE processed = 0 ORDER BY ts ASC LIMIT 1";    
-
-    // *** CHANGE 4: Removed old MySQL-style query/error check ***
-    // if (pgsql_query(conn, q)) { fprintf(stderr, "Command select failed: %s\n", pgsql_error(conn)); return; }
 
     PGresult *res = PQexec(conn, select_q);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) { // Check for successful SELECT
@@ -195,8 +193,6 @@ void poll_and_process_commands(PGconn *conn, MotorState *s) {
         return;
     }
 
-    // *** CHANGE 5: Replaced MySQL-style loop/fetch with direct PGresult access for LIMIT 1 ***
-    // Note: Since we use LIMIT 1, we access row 0 directly.
     char *id = PQgetvalue(res, 0, 0);          
     char *client_id = PQgetvalue(res, 0, 1);
     char *percent = PQgetvalue(res, 0, 2);
@@ -219,17 +215,16 @@ void poll_and_process_commands(PGconn *conn, MotorState *s) {
     pthread_mutex_unlock(&s->lock);
 
     char uq[256];
-    // Note: PostgreSQL uses 'CURRENT_TIMESTAMP' for current time
     snprintf(uq, sizeof(uq),
          "UPDATE commands SET processed=1, processed_ts = CURRENT_TIMESTAMP, processed_by = 'motor_controller' WHERE id = %s",
          id);
          
-    // Execute the Update query
+    // Execute the updated query
     PGresult *update_res = PQexec(conn, uq); // Use a new result variable for the update
     if (PQresultStatus(update_res) != PGRES_COMMAND_OK) {
      fprintf(stderr, "Failed to mark processed: %s\n", PQerrorMessage(conn));
     }
-    PQclear(update_res); // Clear the update result
+    PQclear(update_res); // Clear the updated result
 
     pthread_mutex_lock(&last_processed_lock);
     last_processed_ms = now;
@@ -237,12 +232,11 @@ void poll_and_process_commands(PGconn *conn, MotorState *s) {
 
     printf("[controller] applied command id=%s from=%s percent=%s at ms=%lld\n", id, client_id, percent, now);
     
-    PQclear(res); // *** CHANGE 6: Clear the SELECT result (was mistakenly cleared earlier in this logic block) ***
+    PQclear(res); 
 }
 
 //PID struct
 typedef struct {
-// ... (PID struct and pid_step function are fine) ...
     double kp, ki, kd;
     double prev_err;
     double integral;
@@ -258,10 +252,10 @@ double pid_step(PID *pid, double setpoint, double measure, double dt) {
 
 // New PostgreSQL Connection Function
 PGconn *thread_db_connect() {
-    // *** CHANGE 7: Use the db_conninfo string for connection ***
-    PGconn *conn = PQconnectdb(db_conninfo);
+
+    PGconn *conn = PQconnectdb(db_conninfo); //Connects to database
     
-    // Check connection status
+    // Checks connection status
     if (PQstatus(conn) != CONNECTION_OK) {
         fprintf(stderr, "Thread DB connection failed: %s\n", PQerrorMessage(conn));
         PQfinish(conn);
@@ -294,8 +288,7 @@ void *telemetry_thread(void *arg) {
         msleep(TELEMETRY_INTERVAL_MS);
     }
 
-    // *** CHANGE 8: Replaced mysql_close/pgsql_close with PQfinish ***
-    PQfinish(conn);
+    PQfinish(conn); // Frees memory and closes network socket
     return NULL;
 }
 
@@ -320,16 +313,14 @@ void *command_poller_thread(void *arg) {
         msleep(COMMAND_POLL_INTERVAL_MS);
     }   
 
-    // *** CHANGE 9: Replaced mysql_close/pgsql_close with PQfinish ***
     PQfinish(conn);
     return NULL;
 }
 
-// TCP client handler (no changes needed here)
 // TCP client handler 
 void handle_client_socket(int client_fd, PGconn *conn) {
     char buf[256];
-    ssize_t r = read(client_fd, buf, sizeof(buf)-1);  //makes sure date from client isn't empty
+    ssize_t r = read(client_fd, buf, sizeof(buf)-1);  // Makes sure date from client isn't empty
     if (r <= 0) { close(client_fd); return; }
     buf[r] = 0;
 
@@ -377,16 +368,18 @@ void *tcp_server_thread(void *arg) {
     }
 
     close(srv);
-    // *** CHANGE 10: Replaced mysql_close/pgsql_close with PQfinish ***
+
     PQfinish(conn);
     return NULL;
 }
 
-/* Main */
+// main
 int main() {
-    // ... (main is fine) ...
+
     srand(time(NULL));
     pthread_mutex_init(&state.lock, NULL);
+
+    // Initialize state variables
     state.gas_level = 100.0;
     state.battery_level = 100.0;
     state.motor_speed = 0.0;

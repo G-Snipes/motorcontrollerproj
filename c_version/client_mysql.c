@@ -14,7 +14,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <math.h>
-#include <mysql/mysql.h>
+#include <mysql/mysql.h> //mysql library
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
