@@ -39,7 +39,7 @@ typedef struct {
 MotorState state;
 
 // PostgreSQL connection string 
-const char *db_conninfo = "host=127.0.0.1 port=5432 dbname=motordb user=motoruser password=MotorPass123!"; // Correct connection string
+const char *db_conninfo = "host=127.0.0.1 port=5432 dbname=motordb user=motoruser password=MotorPass123!"; 
 unsigned int db_port = 5432; // Kept for reference, but included in db_conninfo
 
 long long last_processed_ms = 0;

@@ -1,8 +1,8 @@
 // motor_controller_mysql.js
 
-const mysql = require('mysql2/promise');
+const mysql = require('mysql2/promise'); //instantiates sql database module for asynchronous computing
 
-// --- Configuration ---
+// Configuration 
 const DB_CONFIG = {
     host: '127.0.0.1',
     user: 'motoruser',
@@ -14,15 +14,15 @@ const WRITE_INTERVAL_MS = 200; // Log to motordb every 200ms
 const COMMAND_POLL_INTERVAL_MS = 100; // Check 'commands' table every 100ms
 const COMMAND_COOLDOWN_MS = 200; // Ignore new commands for 200ms after one is processed
 
-// --- State Variables ---
+// State Variables 
 let gas_level = 100.0;
 let battery_level = 100.0;
 let motor_speed = 0.0;  //starts at 0
-let motor_speed_set_point = 100.0; 
+let motor_speed_set_point = 100.0; //starts at 100 (speed can't exceed 100)
 let motor_temp = 25.0;
 let last_command_ts = 0; // Timestamp of the last processed command (from commands table)
 
-// --- PID Control Constants and State ---
+// PID Constants and State 
 const DT = WRITE_INTERVAL_MS / 1000; // Time step in seconds (0.2)
 const Kp = 0.5;
 const Ki = 0.1;
@@ -35,9 +35,9 @@ const RANDOM_ERROR_MAX = 0.5;
 // Database Connection
 let db;
 
-async function connectDB() {
+async function connectDB() { // Connect db to mysql database
     try {
-        db = await mysql.createConnection(DB_CONFIG);
+        db = await mysql.createConnection(DB_CONFIG); 
         console.log('Motor Controller connected to MySQL database.');
     } catch (err) {
         console.error('Database connection failed:', err);
@@ -45,10 +45,16 @@ async function connectDB() {
     }
 }
 
-// --- PID Step ---
+// PID Step 
 function pidStep() {
-    const error = motor_speed_set_point - motor_speed; 
+    const error = motor_speed_set_point - motor_speed; //error equals the desired set point - current motor speed
     
+    if (depletedLevels() == true) {
+        motor_speed_set_point = 0.0; // Force setpoint to zero
+        prev_err = 0;
+        console.error('\n🚨 CRITICAL SHUTDOWN: Gas or Battery Exhausted! Setting setpoint to 0.0.');
+    }
+
     // PID Calculations
     const proportionalOutput = Kp * error;  
     integral += error * DT;                 
@@ -57,24 +63,22 @@ function pidStep() {
     const derivativeOutput = Kd * derivative;    
     const total = proportionalOutput + integralOutput + derivativeOutput; 
 
-    // Update Speed and State
-    const randomError = (Math.random() * 2 * RANDOM_ERROR_MAX) - RANDOM_ERROR_MAX;  
+    // Updates speed and applies random error
+    const randomError = (Math.random() * 2 * RANDOM_ERROR_MAX) - RANDOM_ERROR_MAX; 
     motor_speed += total + randomError;  
 
-    prev_err = error; 
+    prev_err = error; //update with new error
 
-    motor_speed = Math.max(0, Math.min(100, motor_speed));
-    motor_temp = 25.0 + (motor_speed * 0.2);
-    // Gas/Battery simple decay (optional, but makes simulation more complete)
+    motor_speed = Math.max(0, Math.min(100, motor_speed)); //motor speed equals new motor speed if its between 0 & 100.
+    motor_temp = 25.0 + (motor_speed * 0.2); //motor temp proportional to motor speed
     gas_level = Math.max(0, gas_level - 0.01 * motor_speed * DT); 
     battery_level = Math.max(0, battery_level - 0.05 * motor_speed * DT); 
 }
 
-// --- Write Motor Data to Log (motordb) ---
+// Write Motor Data to Log (motordb) 
 async function writeData() {
-    // [DEBUG] writeData running... 
 
-    // 1. Update State Values (MUST be first)
+    // 1. Update State Values 
     pidStep(); 
     
     const sql = `
@@ -84,7 +88,7 @@ async function writeData() {
     `;
     
     try {
-        // 2. Execute the Database Insert
+        // Executes database insert
         await db.execute(sql, [
             gas_level, 
             battery_level, 
@@ -93,7 +97,7 @@ async function writeData() {
             motor_temp
         ]);
         
-        // 3. Log the Success/Live Data (MUST be after the DB execute)
+        // 3. Log the Success and Live Data (toFixed & padStart are for console formatting)
         console.log(
             `[LOG] Speed: ${motor_speed.toFixed(2).padStart(6)} | ` +
             `SetPt: ${motor_speed_set_point.toFixed(2).padStart(6)} | ` +
@@ -104,15 +108,14 @@ async function writeData() {
         
     } catch (err) {
         // 4. Log the Failure (If we reach here, the INSERT failed)
-        // This is the error message we need to see if the table is still wrong.
-        console.error('!!! CRITICAL DB WRITE ERROR !!! Check table name or columns.', err.message); 
+        console.error('! CRITICAL DB WRITE ERROR ! Check table name or columns.', err.message); 
     }
 }
 
-// --- Check for New Commands from Clients (commmandsJS table) ---
+// Check for New Commands from Clients (commmandsJS table) 
 async function checkCommands() { 
     try {
-        // Find the LATEST command written by ANY client
+        // Find the latest command written by any client
         const [rows] = await db.execute(
             `SELECT percent_change, ts FROM commands ORDER BY ts DESC LIMIT 1`
         );
@@ -123,12 +126,12 @@ async function checkCommands() {
 
             if (commandTime > last_command_ts + COMMAND_COOLDOWN_MS) {
                 
-                // 1. Calculate the new setpoint based on the last known speed (from PID state)
+                // Calculates the new motor speed set point based on the last known speed from the PID state
                 const currentSetpoint = motor_speed_set_point;
                 const changeAmount = currentSetpoint * (percentChange / 100.0);
-                const newSetpoint = Math.max(0, Math.min(100, currentSetpoint + changeAmount));
+                const newSetpoint = Math.max(0, Math.min(100, currentSetpoint + changeAmount)); // sets it between 0 - 100
                 
-                // 2. Apply and Log the Command
+                // apply and log command
                 motor_speed_set_point = parseFloat(newSetpoint);
                 last_command_ts = commandTime; 
                 console.log(`\n✅ COMMAND RECEIVED: New Setpoint is ${motor_speed_set_point.toFixed(2)}.`);
@@ -143,13 +146,12 @@ async function checkCommands() {
     }
 }
 
-// --- Main Execution ---
+// main
 async function main() {
-    await connectDB(); //connect to SQL server
+    await connectDB(); // Connect to SQL server
     
-    // Set up the periodic tasks
-    setInterval(writeData, WRITE_INTERVAL_MS);
-    setInterval(checkCommands, COMMAND_POLL_INTERVAL_MS);
+    setInterval(writeData, WRITE_INTERVAL_MS); // Writes to database every 0.2s
+    setInterval(checkCommands, COMMAND_POLL_INTERVAL_MS); // Polls for commands every 0.1s 
     
     console.log(`Motor Controller running: Logging to motordb every ${WRITE_INTERVAL_MS}ms, Polling 'commands' every ${COMMAND_POLL_INTERVAL_MS}ms.`);
 }
