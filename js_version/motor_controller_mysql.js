@@ -2,7 +2,7 @@
 
 const mysql = require('mysql2/promise'); //instantiates sql database module for asynchronous computing
 
-// configures the database (same as c version)
+// Configuration 
 const DB_CONFIG = {
     host: '127.0.0.1',
     user: 'motoruser',
@@ -14,7 +14,7 @@ const WRITE_INTERVAL_MS = 200; // Log to motordb every 200ms
 const COMMAND_POLL_INTERVAL_MS = 100; // Check 'commands' table every 100ms
 const COMMAND_COOLDOWN_MS = 200; // Ignore new commands for 200ms after one is processed
 
-// State variables
+// State Variables 
 let gas_level = 100.0;
 let battery_level = 100.0;
 let motor_speed = 0.0;  //starts at 0
@@ -22,7 +22,7 @@ let motor_speed_set_point = 100.0; //starts at 100 (speed can't exceed 100)
 let motor_temp = 25.0;
 let last_command_ts = 0; // Timestamp of the last processed command (from commands table)
 
-// PID Control Constants
+// PID Constants and State 
 const DT = WRITE_INTERVAL_MS / 1000; // Time step in seconds (0.2)
 const Kp = 0.5;
 const Ki = 0.1;
@@ -45,18 +45,7 @@ async function connectDB() { // Connect db to mysql database
     }
 }
 
-// Will stop the motor controller if gas or battery are depleted
-function depletedLevels() {
-
-    if ((gas_level <= 0) || (battery_level <= 0)) { //motor speed goes to 0 if gas or battery are depleted.
-        // First time hitting zero, trigger shutdown
-        return true;
-    }
-
-    return false;
-}
-
-// Performs pid calculations
+// PID Step 
 function pidStep() {
     const error = motor_speed_set_point - motor_speed; //error equals the desired set point - current motor speed
     
@@ -80,19 +69,18 @@ function pidStep() {
 
     prev_err = error; //update with new error
 
-    motor_speed = Math.max(0, Math.min(100, motor_speed)); // *Ensures motor speed does stays inbetween 0 - 100
-
-    motor_temp = 25.0 + (motor_speed * 0.2); //simulates motor temp
-    gas_level = Math.max(0, gas_level - 0.01 * motor_speed * DT); //simulates gas_level
-    battery_level = Math.max(0, battery_level - 0.001 * motor_speed * DT); //simulates battery level
+    motor_speed = Math.max(0, Math.min(100, motor_speed)); //motor speed equals new motor speed if its between 0 & 100.
+    motor_temp = 25.0 + (motor_speed * 0.2); //motor temp proportional to motor speed
+    gas_level = Math.max(0, gas_level - 0.01 * motor_speed * DT); 
+    battery_level = Math.max(0, battery_level - 0.05 * motor_speed * DT); 
 }
 
-// Write motor data to log 
+// Write Motor Data to Log (motordb) 
 async function writeData() {
 
-    pidStep(); // Update state values
-
-    // Prepares SQL statement for inserting new values into database
+    // 1. Update State Values 
+    pidStep(); 
+    
     const sql = `
         INSERT INTO motordb 
         (gas_level, battery_level, motor_speed, motor_speed_set_point, motor_temp)
@@ -109,7 +97,7 @@ async function writeData() {
             motor_temp
         ]);
         
-        // Logs the success/live data
+        // 3. Log the Success and Live Data (toFixed & padStart are for console formatting)
         console.log(
             `[LOG] Speed: ${motor_speed.toFixed(2).padStart(6)} | ` +
             `SetPt: ${motor_speed_set_point.toFixed(2).padStart(6)} | ` +
@@ -118,12 +106,13 @@ async function writeData() {
             `Battery: ${battery_level.toFixed(1).padStart(5)}%`
         );
         
-    } catch (err) { // Failure log
-        console.error('!!! CRITICAL DB WRITE ERROR !!! Check table name or columns.', err.message); 
+    } catch (err) {
+        // 4. Log the Failure (If we reach here, the INSERT failed)
+        console.error('! CRITICAL DB WRITE ERROR ! Check table name or columns.', err.message); 
     }
 }
 
-// Polls client for new command
+// Check for New Commands from Clients (commmandsJS table) 
 async function checkCommands() { 
     try {
         // Find the latest command written by any client
