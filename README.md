@@ -31,7 +31,7 @@ The controller reads commands, updates the set point, and logs real-time motor d
 Clients issue percentage-based speed change commands and monitor peer activity.
 
 * **Command Issuance:** Clients send commands (via the data stream) to change the motor speed by a given percentage.
-* **Peer Monitoring:** Each computer reads from the database every **250 ms** to check for commands sent by *other* clients.
+* **Peer Monitoring:** Each computer reads from the database every **250 ms** to check for commands sent from other clients.
 * **Example:** When Computer A reads that Computer B has given the command "Motor speed increase by 25%," it displays the command and the identity of the issuer.
 
 ---
@@ -100,6 +100,7 @@ This table stores the commands issued by clients.
 | `processed_by` | `string` |
 
 ---
+*For version control I just made a seperate js branch.
 
 ## 📈 Technology & Performance Comparison
 
