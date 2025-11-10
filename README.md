@@ -4,10 +4,12 @@
 
 This project simulates a real-world system where multiple clients issue commands to a single motor controller through a database.
 
-* **Motor Controller Executable:** Writes telemetry data to the database.
-* **Client Executable:** Allows users to send motor speed commands to the controller.
-* **Concurrency:** To simulate multiple clients sending commands simultaneously, the client executable can be run on separate network ports.
-* **Communication:** Executables communicate via a shared data stream (the database).
+This project simulates a real-world system where multiple clients issue commands to a single motor controller through a database.
+One executable simulates the motor controller writing to a database.
+Another executable will allow a client to send commands to the motor controller. 
+(To simulate multiple clients sending commands to the motor simultaneously, this executable can be run on separate network ports.)
+The executables communicate via a shared data stream.
+
 
 ---
 
