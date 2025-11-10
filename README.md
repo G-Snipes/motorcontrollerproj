@@ -99,21 +99,22 @@ This table stores the commands issued by clients.
 | `processed_ts` | `timestamp` |
 | `processed_by` | `string` |
 
----
 *For version control I just made a seperate js branch.
+---
 
 ## 📈 Technology & Performance Comparison
 
-This project was developed using three configurations to compare **C** vs. **JavaScript (Node.js)** and **mySQL** vs. **PostgreSQL** database performance.
+This project was written in C and used mySQL and PostgreSQL as I wanted to compare and try out the two. I also wrote it in Javascript and used Node.js for its asynchronous, non-blocking I/O model for concurrency. 
 
-* The project was written in **C** using both mySQL and PostgreSQL drivers.
-* It was also written in **JavaScript** using **Node.js** for its **asynchronous, non-blocking I/O model** to manage concurrency.
-* **Version Control Note:** A dedicated `js` branch was created for the JavaScript version.
+I tried my best to compare the performances between the two languages and between mySQL and PostgreSQL query languages. I took screen recordings below of each of them running. 
 
-We attempted to compare the performance of these setups, and screen recordings were taken of each running:
 
-| Setup | Description | Video Link |
-| :--- | :--- | :--- |
+Ultimately this project is a bit too simple to compare the performances of these three setups as they are all highly capable of processing this much data. 
+
+Below are screen recordings of each setup running and the simlutated values in real time:
+
+| Setup | Video Link |
+| :--- | :--- |
 | **PostgreSQL** | General query and setup demonstration. | [PostgreSQL](https://youtu.be/5N355Qy5_Ew) |
 | **mySQL in C** | C application connecting to MySQL. | [mySQL in C](https://youtu.be/KW2adEY1mmc) |
 | **JS (Node.js)** | JavaScript application connecting to a database. | [JS](https://youtu.be/UgdTlr6xn0s) |
@@ -122,10 +123,11 @@ We attempted to compare the performance of these setups, and screen recordings w
 
 ### Conclusion
 
-At this small scale, the performance difference is determined primarily by **network latency**, **thread scheduling**, and the **overhead of the C code**, not the database engine itself.
+At this small scale, the performance difference is determined by network latency, thread scheduling, and the overhead of the C code, but not really the database engine itself.
 
-| Technology | Analysis | Winner |
-| :--- | :--- | :--- |
-| **Concurrency (C vs. Node.js)** | **C Multithreading** is very fast and efficient (true parallel computing) but requires careful synchronization to prevent issues, adding complexity and overhead. **Node.js**'s asynchronous I/O model was much more straightforward for the code and is ideal for database operations like this. | **Node.js** (for simpler concurrency model and syntax) |
-| **Database Query Languages** | **PostgreSQL** is generally more robust and superior for complex queries. **SQL** (mySQL) was perfectly adequate for this simple project, making them nearly equal here. | **PostgreSQL** (for overall long-term robustness) |
+Multithreading in C can be very fast and efficient but it requires careful synchronization to prevent race conditions or memory issues. This is true parallel computing and is great for CPU intensive tasks however it is more complex (especially with its  syntax) and there is more overhead. 
+
+Using Node.js for its asynchronous I/O single-threaded event loop structure was much more straightforward when it came to the code. It's great for database operations and a simple project like this one but it would need worker threads for more CPU-intensive tasks. Node.js was the winner for this project for its simpler concurrency model and syntax. 
+
+As for the database querying languages, PostgreSQL is likely the more superior one as it is just simply more robust. SQL was able to handle this project perfectly fine, and these two languages are pretty equal unless you really start pushing their limits query-wise. In which case, PostgreSQL is the winner.
 
