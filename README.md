@@ -65,7 +65,7 @@ createdb motordb --owner=motoruser
 gcc motor_controller_pgsql.c -o motor_controller_pgsql -lpq -lpthread -lm
 ```
 
-UML Function Block Diagram:
+### UML Function Block Diagram:
 <img width="616" height="442" alt="Screenshot 2025-11-09 at 7 21 22 PM" src="https://github.com/user-attachments/assets/e7defb72-9e1e-425e-bf12-24e7af1907f2" />
 
 ## 🗃️ Database Structure
@@ -115,9 +115,9 @@ Below are screen recordings of each setup running and the simlutated values in r
 
 | Setup | Video Link |
 | :--- | :--- |
-| **PostgreSQL** | General query and setup demonstration. | [PostgreSQL](https://youtu.be/5N355Qy5_Ew) |
-| **mySQL in C** | C application connecting to MySQL. | [mySQL in C](https://youtu.be/KW2adEY1mmc) |
-| **JS (Node.js)** | JavaScript application connecting to a database. | [JS](https://youtu.be/UgdTlr6xn0s) |
+| **PostgreSQL** | [PostgreSQL](https://youtu.be/5N355Qy5_Ew) |
+| **mySQL in C** | [mySQL in C](https://youtu.be/KW2adEY1mmc) |
+| **JS (Node.js)** | [JS](https://youtu.be/UgdTlr6xn0s) |
 
 > ℹ️ **Observation:** Ultimately this project proved too simple for a meaningful performance comparison, as all three setups are highly capable of processing this limited data load.
 
