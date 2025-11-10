@@ -99,7 +99,7 @@ This table stores the commands issued by clients.
 | `processed_ts` | `timestamp` |
 | `processed_by` | `string` |
 
-*For version control I just made a seperate js branch.
+For version control I just made a seperate js branch.
 ---
 
 ## 📈 Technology & Performance Comparison
